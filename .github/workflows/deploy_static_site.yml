@@ -1,0 +1,81 @@
+name: Deploy Static Site
+
+# Workflow is triggered when a pull-request is submitted
+on:
+  pull_request:
+    types:
+      - closed
+  
+  # This line to allow the workflow to be ran manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'force build'
+        required: false
+        type: boolean
+      target_dir:
+        description: "Type the full target directory name"
+        required: false
+        type: string
+      framework:
+        description: "Choose this repo's framework type"
+        default: 'none'
+        required: false
+        type: choice
+        options:
+        - nextjs
+        - gatsby
+        - none
+env:
+  target_dir: /mnt/nfs/wpsite/${{ inputs.target_dir }}/htdocs
+  gatsby_build_dir: ${{ github.workspace }}/public/
+  nextjs_build_dir: ${{ github.workspace }}/out/
+jobs:
+  build:
+    if: github.event.pull_request.merged == true || ${{ inputs.force_build }}
+    runs-on: [self-hosted, Linux, web]
+    steps:
+      # Start by checking out the repo
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - uses: pnpm/action-setup@v2.0.1
+        with:
+          version: 7
+          run_install: |
+            - recursive: true
+              args: [--no-frozen-lockfile]
+      - name: build
+        run: pnpm build
+      # Get the "out" folder generated after build is run
+      - uses: actions/upload-artifact@v2
+        if: ${{inputs.framework == 'nextjs' }}
+        with: 
+          name: out-dir
+          path: ${{ env.nextjs_build_dir }}
+      - uses: actions/upload-artifact@v2
+        if: ${{inputs.framework == 'gatsby' }}
+        with: 
+          name: out-dir
+          path: ${{ env.gatsby_build_dir }}
+  deploy:
+    if: ${{ inputs.target_dir }} && ${{ inputs.framework }}
+    needs: build
+    runs-on: [self-hosted, Linux, web]
+    steps:
+      # Copy to Remote
+      - name: "Sanity Check"
+        run: echo ${{ inputs.target_dir }} ${{ inputs.framework }}
+      - name: "Does Target Directory Exist?"
+        run: echo "ls $target_dir"
+      - name: "Backup Current Dir"
+        uses: actions/upload-artifact@v2
+        if: ${{ env.target_dir }}
+        with:
+          name: backup-dir
+          path: ${{ env.target_dir }}
+      - if: ${{ inputs.framework == 'nextjs' }} 
+        run: rsync -r ${{ env.nextjs_build_dir }} ${{ env.target_dir }}
+      - if: ${{ inputs.framework == 'gatsby' }}
+        run: rsync -r ${{ env.gatsby_build_dir }} ${{ env.target_dir }}
