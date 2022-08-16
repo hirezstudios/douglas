@@ -1,18 +1,10 @@
 name: Deploy Static Site
 
-# Workflow is triggered when a pull-request is submitted
-on:
-  pull_request:
-    types:
-      - closed
-  
+
+on:  
   # This line to allow the workflow to be ran manually from the Actions tab
   workflow_dispatch:
     inputs:
-      force_build:
-        description: 'force build'
-        required: false
-        type: boolean
       target_dir:
         description: "Type the full target directory name"
         required: false
